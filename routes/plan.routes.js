@@ -1,5 +1,7 @@
 const routes = require("express").Router();
 const db = require("../database");
+const { QueryTypes } = require("sequelize");
+const sequelize = require("sequelize");
 
 const env = process.env.NODE_ENV || "dev";
 const config = require("../config")[env];
@@ -33,6 +35,7 @@ async function verifyToken(req, res, next) {
     let user = await User.findOne({
       where: {
         token: token,
+        isAdmin: true,
       },
     });
 
@@ -93,8 +96,27 @@ routes.post(
 
 routes.get("/plan", async (req, res) => {
   await db.sync();
-  courses = await Course.findAll();
+  let courses = await Course.findAll();
   return res.send(courses);
+});
+
+routes.post("/plan/groups", async (req, res) => {
+  await db.sync();
+  let body = req.body;
+  if (!body) return res.sendStatus(400);
+  let groups = body["groups"].toString();
+  if (groups.length == 0) {
+    let courses = await db.query(`SELECT * FROM "Courses" WHERE "group" = ''`, {
+      type: QueryTypes.SELECT,
+    });
+    return res.send(courses);
+  } else {
+    let courses = await db.query(
+      `SELECT * FROM "Courses" WHERE "group" IN (${groups}) OR "group" = ''`,
+      { type: QueryTypes.SELECT }
+    );
+    return res.send(courses);
+  }
 });
 
 module.exports = routes;

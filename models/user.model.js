@@ -6,6 +6,7 @@ User.init(
   {
     username: DataTypes.STRING,
     password: DataTypes.STRING,
+    isAdmin: { type: DataTypes.BOOLEAN, defaultValue: false },
     token: DataTypes.TEXT,
   },
   { sequelize: db, modelName: "Users" }
