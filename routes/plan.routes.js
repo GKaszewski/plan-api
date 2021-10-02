@@ -70,6 +70,8 @@ routes.post(
   upload.single("data"),
   async (req, res) => {
     await db.sync();
+    let courses = await Course.findAll();
+    courses.forEach((course) => course.destroy());
     const fileRows = [];
     csv
       .parseFile(req.file.path)
