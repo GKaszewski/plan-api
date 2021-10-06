@@ -104,9 +104,10 @@ routes.get("/plan", async (req, res) => {
 
 routes.post("/plan/groups", async (req, res) => {
   await db.sync();
-  let body = req.body;
+  const body = req.body;
   if (!body) return res.sendStatus(400);
-  let groups = body["groups"].toString();
+  const groups = body["groups"].toString();
+  const calculus = body["calculus"].toString();
   if (groups.length == 0) {
     let courses = await db.query(`SELECT * FROM "Courses" WHERE "group" = ''`, {
       type: QueryTypes.SELECT,
@@ -114,7 +115,9 @@ routes.post("/plan/groups", async (req, res) => {
     return res.send(courses);
   } else {
     let courses = await db.query(
-      `SELECT * FROM "Courses" WHERE "group" IN (${groups}) OR "group" = ''`,
+      `SELECT * FROM "Courses" WHERE ("group" IN (${groups}) OR "group" = '') and not (name LIKE '%calculus' and type='ćw.')
+      UNION
+      SELECT * FROM "Courses" WHERE "group" ='${calculus}' and name LIKE '%calculus' and type='ćw.'`,
       { type: QueryTypes.SELECT }
     );
     return res.send(courses);
