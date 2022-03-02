@@ -51,17 +51,17 @@ routes.post("/auth/login", async (req, res) => {
   let data = req.body;
 
   const error = validateUser(data);
-  if (!error) return res.sendStatus(400).send("Credentials are wrong.");
+  if (!error) return res.sendStatus(400);
 
   let user = await User.findOne({
     where: {
       username: data["username"],
     },
   });
-  if (!user) return res.sendStatus(404).send("Couldn't find user.");
+  if (!user) return res.sendStatus(404);
 
   const validPassword = await bcrypt.compare(data["password"], user.password);
-  if (!validPassword) return res.sendStatus(400).send("Wrong password!");
+  if (!validPassword) return res.sendStatus(400);
 
   const token = jwt.sign({ id: user.id }, config.secret);
 

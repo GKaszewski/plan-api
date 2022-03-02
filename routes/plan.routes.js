@@ -48,12 +48,14 @@ async function verifyToken(req, res, next) {
 
 const createCourseFromCSV = (headers, row) => {
   const course = {};
+  console.log(`$HEADERS: {headers}`);
   for (let i = 0; i < headers.length; i++) {
-    if (i == 3) {
+    if (i == 4) {
       let groupRow = row[i];
       let groups = groupRow.split("+");
       groups.forEach((group) => {
         group = group.slice(6);
+        console.log(`group: ${group}`);
         course[headersDict[headers[i]]] = group;
       });
     } else {
@@ -87,9 +89,9 @@ routes.post(
 
         fs.unlinkSync(req.file.path);
 
-        courses.forEach(async (course) => {
-          let c = await Course.create(course);
-        });
+        // courses.forEach(async (course) => {
+        //   let c = await Course.create(course);
+        // });
 
         return res.send(courses);
       });
