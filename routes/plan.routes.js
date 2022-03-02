@@ -14,116 +14,141 @@ const multer = require("multer");
 const upload = multer({ dest: "/tmp/csv/" });
 
 const headersDict = {
-  dzien: "day",
-  godz: "hour",
-  przedmiot: "name",
-  grupa: "group",
-  nauczyciel: "professor",
-  sala: "room",
-  typ: "type",
-  uwagi: "notes",
-  dataod: "dateFrom",
-  datado: "dateTo",
+	dzien: "day",
+	godz: "hour",
+	przedmiot: "name",
+	grupa: "group",
+	nauczyciel: "professor",
+	sala: "room",
+	typ: "type",
+	uwagi: "notes",
+	dataod: "dateFrom",
+	datado: "dateTo",
 };
 
 async function verifyToken(req, res, next) {
-  await db.sync();
-  const token = req.headers["authorization"];
-  if (!token) return res.sendStatus(403);
+	await db.sync();
+	const token = req.headers["authorization"];
+	if (!token) return res.sendStatus(403);
 
-  try {
-    let user = await User.findOne({
-      where: {
-        token: token,
-        isAdmin: true,
-      },
-    });
+	try {
+		let user = await User.findOne({
+			where: {
+				token: token,
+				isAdmin: true,
+			},
+		});
 
-    if (!user) return res.sendStatus(403);
-    next();
-  } catch (e) {
-    console.log(e);
-  }
+		if (!user) return res.sendStatus(403);
+		next();
+	} catch (e) {
+		console.log(e);
+	}
 }
 
 const createCourseFromCSV = (headers, row) => {
-  const course = {};
-  console.log(`$HEADERS: {headers}`);
-  for (let i = 0; i < headers.length; i++) {
-    if (i == 4) {
-      let groupRow = row[i];
-      let groups = groupRow.split("+");
-      groups.forEach((group) => {
-        group = group.slice(6);
-        console.log(`group: ${group}`);
-        course[headersDict[headers[i]]] = group;
-      });
-    } else {
-      course[headersDict[headers[i]]] = row[i];
-    }
-  }
+	const course = {};
+	console.log(`$HEADERS: {headers}`);
+	for (let i = 0; i < headers.length; i++) {
+		if (i == 4) {
+			let groupRow = row[i];
+			let groups = groupRow.split("+");
+			groups.forEach((group) => {
+				group = group.slice(6);
+				course[headersDict[headers[i]]] = group;
+			});
+		} else {
+			course[headersDict[headers[i]]] = row[i];
+		}
+	}
 
-  return course;
+	return course;
 };
 
 routes.post(
-  "/plan/upload",
-  verifyToken,
-  upload.single("data"),
-  async (req, res) => {
-    await db.sync();
-    let courses = await Course.findAll();
-    courses.forEach((course) => course.destroy());
-    const fileRows = [];
-    csv
-      .parseFile(req.file.path)
-      .on("data", (data) => {
-        fileRows.push(data);
-      })
-      .on("end", () => {
-        headers = fileRows.shift();
-        const courses = fileRows.reduce((stack, row) => {
-          stack.push(createCourseFromCSV(headers, row));
-          return stack;
-        }, []);
+	"/plan/upload",
+	verifyToken,
+	upload.single("data"),
+	async (req, res) => {
+		await db.sync();
+		let courses = await Course.findAll();
+		courses.forEach((course) => course.destroy());
+		const fileRows = [];
+		csv.parseFile(req.file.path)
+			.on("data", (data) => {
+				fileRows.push(data);
+			})
+			.on("end", () => {
+				headers = fileRows.shift();
+				const courses = fileRows.reduce((stack, row) => {
+					stack.push(createCourseFromCSV(headers, row));
+					return stack;
+				}, []);
 
-        fs.unlinkSync(req.file.path);
+				fs.unlinkSync(req.file.path);
 
-        // courses.forEach(async (course) => {
-        //   let c = await Course.create(course);
-        // });
+				courses.forEach(async (course) => {
+				  let c = await Course.create(course);
+				});
 
-        return res.send(courses);
-      });
-  }
+				return res.send(courses);
+			});
+	}
 );
 
 routes.get("/plan", async (req, res) => {
-  await db.sync();
-  let courses = await Course.findAll();
-  return res.send(courses);
+	await db.sync();
+	let courses = await Course.findAll();
+	return res.send(courses);
 });
 
-routes.post("/plan/groups", async (req, res) => {
-  await db.sync();
-  const body = req.body;
-  if (!body) return res.sendStatus(400);
-  const groups = body["groups"].toString();
-  const calculus = body["calculus"].toString();
-  if (groups.length == 0) {
-    let courses = await db.query(`SELECT * FROM "Courses" WHERE "group" = ''`, {
-      type: QueryTypes.SELECT,
-    });
-    return res.send(courses);
-  } else {
-    let courses = await db.query(
-      `SELECT * FROM "Courses" WHERE ("group" IN (${groups}) OR "group" = '') and not (name LIKE '%calculus' and type='ćw.')
+const fetchGroupsWithCalculus = async (groups, body) => {
+	const calculus = body["calculus"].toString();
+	if (groups.length == 0) {
+		let courses = await db.query(
+			`SELECT * FROM "Courses" WHERE "group" = ''`,
+			{
+				type: QueryTypes.SELECT,
+			}
+		);
+		return courses;
+	} else {
+		let courses = await db.query(
+			`SELECT * FROM "Courses" WHERE ("group" IN (${groups}) OR "group" = '') and not (name LIKE '%calculus' and type='ćw.')
       UNION
       SELECT * FROM "Courses" WHERE "group" ='${calculus}' and name LIKE '%calculus' and type='ćw.'`,
-      { type: QueryTypes.SELECT }
-    );
-    return res.send(courses);
-  }
+			{ type: QueryTypes.SELECT }
+		);
+
+		return courses;
+	}
+};
+
+routes.post("/plan/groups", async (req, res) => {
+	await db.sync();
+	const body = req.body;
+	if (!body) return res.sendStatus(400);
+	const groups = body["groups"].toString();
+	if (body["calculus"]) {
+		const courses = fetchGroupsWithCalculus(groups, body);
+		return res.send(courses);
+	} else {
+		if (groups.length == 0) {
+			let courses = await db.query(
+				`SELECT * FROM "Courses" WHERE "group" = ''`,
+				{
+					type: QueryTypes.SELECT,
+				}
+			);
+			return courses;
+		} else {
+			let courses = await db.query(
+				`SELECT * FROM "Courses" WHERE ("group" IN (${groups}) OR "group" = '');`,
+				{ type: QueryTypes.SELECT }
+			);
+			return res.send(courses);
+		}
+	}
 });
 
 module.exports = routes;
